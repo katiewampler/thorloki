@@ -99,3 +99,29 @@ str_split2 <- function(string, pattern, n=Inf, piece=NA){
 }
 
 
+#' Get season from date
+#'
+#' Spring is defined as months March through May, Summer is months June through
+#' August, Fall is September through November, and Winter is Decemeber through
+#' February.
+#'
+#' @param Date a vector of dates
+#'
+#' @return a vector of seasons
+#' @export
+#'
+#' @examples
+#' dates <- c("2023-02-13", "2023-07-16")
+#' as.Date(dates)
+#' season(dates)
+season <- function(Date){
+  month <- data.frame(dates = Date, month = month(Date))
+  month$season <- NA
+  month$season[month$month %in% 3:5] <- "Spring"
+  month$season[month$month %in% 6:8] <- "Summer"
+  month$season[month$month %in% 9:11] <- "Fall"
+  month$season[month$month %in% c(12,1,2)] <- "Winter"
+
+  return(month$season)
+}
+
