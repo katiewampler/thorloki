@@ -209,8 +209,8 @@ convert_crs <-  function(input, goal, type="numeric", res=NULL){
 #'
 clean_raster <- function(raster, sf, type="numeric",
                          res=NULL, return="df"){
-  stopifnot(class(raster) == "RasterLayer" | class(sf) == c("sf", "data.frame") |
-              type %in% c("numeric", "catagorical") | method %in% c("ngb", "bilinear") |
+  stopifnot(class(raster) == "RasterLayer", class(sf) == c("sf", "data.frame"),
+              type %in% c("numeric", "catagorical"),
               return %in% c("df", "raster"))
   #get units of raster to set buffer
   unit <- sf::st_crs(sf, parameters = TRUE)$units_gdal
