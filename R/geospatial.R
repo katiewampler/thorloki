@@ -215,6 +215,7 @@ clean_raster <- function(raster, sf, type="numeric",
   #get units of raster to set buffer
   unit <- sf::st_crs(sf, parameters = TRUE)$units_gdal
   buffer <- ifelse(unit == "degree", 0.1,5000)
+  res <- ifelse(unit == "degree", 0.0003280119,30)
 
   method <- ifelse(type == "numeric", "bilinear", "ngb") #set summary type
 
@@ -226,7 +227,7 @@ clean_raster <- function(raster, sf, type="numeric",
     colnames(raster_df) <- c("x", "y", "val")
   }else{
     #if not it will clip to smaller area before projecting to save time
-    sf_prj <- convert_crs(raster, sf::st_buffer(sf, dist=buffer))
+    sf_prj <- convert_crs(sf::st_buffer(sf, dist=buffer), raster)
     raster_crop <- raster::crop(raster, sf_prj)
     raster_crop <- raster::mask(raster_crop, sf_prj)
 
