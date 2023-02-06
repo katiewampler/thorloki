@@ -8,7 +8,7 @@
 
 #' @param wd the location with the raw MTBS files
 #' @param save_loc the location to save all the files
-#'
+#' @export
 #' @examples
 #' \dontrun{
 #' wd <- "Z:/3_GIS-GPS/Wildfire/MTBS/McKenzie/"
