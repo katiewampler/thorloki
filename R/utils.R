@@ -191,7 +191,7 @@ theme_green <- function(){
 #'
 #' @importFrom ggthemes theme_clean
 #' @importFrom ggplot2 ggplot aes geom_boxplot geom_point geom_smooth facet_wrap
-
+#' @export
 #'
 #' @examples
 #' x <- sample(1:250, 50)
