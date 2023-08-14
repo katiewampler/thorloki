@@ -125,7 +125,7 @@ season <- function(Date){
   return(month$season)
 }
 
-#' Katie's personal theme
+#' Katie's personal ggplot theme
 #'
 #' Keeps with the green theme branding of my work. Uses Barlow Semi Condensed font
 #' and used the green colors from google slides.
@@ -142,6 +142,15 @@ season <- function(Date){
 #' @importFrom ggthemes theme_clean
 #' @importFrom ggplot2 ggplot aes geom_boxplot geom_point geom_smooth facet_wrap
 #' @export
+#' @examples
+#' x <- sample(1:250, 50)
+#' y <- sample(c("A","B", "C"), 50, replace=T)
+#' z <- sample(c("LOW","MED","HIGH"), 50, replace=T)
+#' w <- sample(1:250, 50)
+#' df <- data.frame(x=x, y=y, z=z, w=w)
+#'
+#' ggplot(df, aes(x=y, y=x, fill=z)) + geom_boxplot() + theme_green()
+#' ggplot(df, aes(x=x, y=w, color=y)) + geom_point() + geom_smooth(method="lm") + theme_green()
 #'
 theme_green <- function(){
   #set up fonts
@@ -166,10 +175,44 @@ theme_green <- function(){
 
 
     #change text
-    axis.title = element_text(family=exbold, size=16, color="#38761dff"),
-    axis.text =  element_text(family=font, color="#274e13"),
-    legend.title = element_text(family=exbold, size=16, color="#38761dff"),
-    legend.text = element_text(family=font, color="#274e13"),
-    strip.text = element_text(family=bold, color="#274e13")
+    axis.title = element_text(family=exbold, size=40, color="#38761dff"),
+    axis.text =  element_text(family=font, size=30, color="#274e13"),
+    legend.title = element_text(family=exbold, size=40, color="#38761dff"),
+    legend.text = element_text(family=font, size=30, color="#274e13"),
+    strip.text = element_text(family=bold, size=40, color="#274e13")
   )
+}
+
+
+#' ggplot theme for publication figures
+#'
+#' Used to help ensure consistent formatting across publication figures. Based on
+#' ggclean with a few modifications.
+#'
+#' @importFrom ggthemes theme_clean
+#' @importFrom ggplot2 ggplot aes geom_boxplot geom_point geom_smooth facet_wrap
+
+#'
+#' @examples
+#' x <- sample(1:250, 50)
+#' y <- sample(c("A","B", "C"), 50, replace=T)
+#' z <- sample(c("LOW","MED","HIGH"), 50, replace=T)
+#' w <- sample(1:250, 50)
+#' df <- data.frame(x=x, y=y, z=z, w=w)
+#'
+#' ggplot(df, aes(x=y, y=x, fill=z)) + geom_boxplot() + theme_pub()
+#' ggplot(df, aes(x=x, y=w, color=y)) + geom_point() + geom_smooth(method="lm") + theme_pub()
+theme_pub <- function(){
+  ggthemes::theme_clean() %+replace%
+    ggplot2::theme(
+      #change background colors
+      plot.background = element_rect(fill = "white", colour = "white"),
+      legend.background = element_rect(fill = "white", colour = "white"),
+
+      #change text
+      axis.title = element_text(face="bold", size=20),
+      legend.title = element_text(face="bold", size=20),
+      axis.text = element_text(size=16),
+      legend.text = element_text(size=16),
+      strip.text = element_text(size=20))
 }
