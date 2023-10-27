@@ -623,3 +623,38 @@ burn_impact <- function(model){
   return(fire)
 
 }
+
+#' Perform double selection using a p-value limit to determine which variable to include
+#'
+#' @param focal a character of the column name of the variable you're interested in
+#' @param response a character of the column name of the response variable
+#' @param p_limit variable with p-value below this limit will be included in the final model
+#' @param df the dataframe with the data to fit in it
+#' @param covar a vector of column names of the variables to include as potential covariates
+#'
+#' @importFrom stats lm as.formula
+#' @return a formula for the final model
+#' @export
+#'
+ds_select <- function(focal="DNBR", response="DOC_mgL", p_limit=0.1, df, covar){
+  focal_col <- which(colnames(df) %in% focal) #get column(s) of focal
+  covar_col <- which(colnames(df) %in% covar) #get column(s) of covariates
+  response_col <- which(colnames(df) %in% response) #get column of response
+  fit_df <- df[,c(response_col, focal_col, covar_col)]
+
+  modeld0 <- stats::lm(stats::as.formula(paste(response, "~", paste(selected, collapse=" + "))), fit_df)
+  selected0 <- as.data.frame(summary(modeld0)$coefficients)
+  selected0 <- subset(selected0, selected0$`Pr(>|t|)` < p_limit)
+  selected0 <- row.names(selected0)
+
+  #step 2: fit model with sev ~ covariates
+  modeld1 <- stats::lm(stats::as.formula(paste(focal, "~", paste(selected, collapse=" + "))), fit_df)
+  selected1 <- as.data.frame(summary(modeld1)$coefficients)
+  selected1 <- subset(selected1, selected1$`Pr(>|t|)` < p_limit)
+  selected1 <- row.names(selected1)
+
+  #step 3: final model includes significant variables for both
+  selected=sort(union(selected0,selected1))
+  selected <- selected[selected != "(Intercept)"]
+  form <- stats::as.formula(paste(response, "~", paste(selected, collapse=" + "), "+", focal))
+  form  }
