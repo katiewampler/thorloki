@@ -642,13 +642,13 @@ ds_select <- function(focal="DNBR", response="DOC_mgL", p_limit=0.1, df, covar){
   response_col <- which(colnames(df) %in% response) #get column of response
   fit_df <- df[,c(response_col, focal_col, covar_col)]
 
-  modeld0 <- stats::lm(stats::as.formula(paste(response, "~", paste(selected, collapse=" + "))), fit_df)
+  modeld0 <- stats::lm(stats::as.formula(paste(response, "~", paste(covar, collapse=" + "))), fit_df)
   selected0 <- as.data.frame(summary(modeld0)$coefficients)
   selected0 <- subset(selected0, selected0$`Pr(>|t|)` < p_limit)
   selected0 <- row.names(selected0)
 
   #step 2: fit model with sev ~ covariates
-  modeld1 <- stats::lm(stats::as.formula(paste(focal, "~", paste(selected, collapse=" + "))), fit_df)
+  modeld1 <- stats::lm(stats::as.formula(paste(focal, "~", paste(covar, collapse=" + "))), fit_df)
   selected1 <- as.data.frame(summary(modeld1)$coefficients)
   selected1 <- subset(selected1, selected1$`Pr(>|t|)` < p_limit)
   selected1 <- row.names(selected1)
