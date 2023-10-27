@@ -8,6 +8,7 @@
 #' @import SSN
 #' @import ggplot2
 #' @importFrom caret R2
+#' @importFrom patchwork wrap_plots
 #'
 #' @return a list of checks (1) is the spatial residuals with just the fixed effects
 #' (2) is the a histogram of the standardized residuals
@@ -19,7 +20,7 @@
 #' @export
 #'
 check_model <- function(model, response){
-  '_resid.stand_' <- exp_var <- residuals <- wrap_plots <- observe <- predict <- pid <- NULL
+  '_resid.stand_' <- exp_var <- residuals <- observe <- predict <- pid <- NULL
   #create list to hold plots
   plots <- list()
   dataset <- model$ssn.object
@@ -44,7 +45,7 @@ check_model <- function(model, response){
       ggplot2::labs(x=var)
     resid_plots[[x-1]] <- plot
   }
-  plots[[5]] <- wrap_plots(resid_plots)
+  plots[[5]] <- patchwork::wrap_plots(resid_plots)
 
 
   #check for potential outliers
