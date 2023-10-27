@@ -24,4 +24,11 @@ Imports:
   displease,
   ggthemes,
   showtext,
-  sysfonts
+  sysfonts, 
+  BAMMtools, 
+  SSN,
+  caret,
+  ggspatial,
+  pals,
+  tidyr,
+  viridis

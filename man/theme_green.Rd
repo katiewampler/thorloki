@@ -17,14 +17,3 @@ font_add("Barlow Semi Condensed", "BarlowSemiCondensed-Regular.ttf")
 font_add("Barlow Semi Condensed ExtraBold", "BarlowSemiCondensed-ExtraBold.ttf")
 font_add("Barlow Semi Condensed SemiBold", "BarlowSemiCondensed-SemiBold.ttf")
 }
-\examples{
-x <- sample(1:250, 50)
-y <- sample(c("A","B", "C"), 50, replace=T)
-z <- sample(c("LOW","MED","HIGH"), 50, replace=T)
-w <- sample(1:250, 50)
-df <- data.frame(x=x, y=y, z=z, w=w)
-
-ggplot(df, aes(x=y, y=x, fill=z)) + geom_boxplot() + theme_green()
-ggplot(df, aes(x=x, y=w, color=y)) + geom_point() + geom_smooth(method="lm") + theme_green()
-
-}

@@ -142,15 +142,6 @@ season <- function(Date){
 #' @importFrom ggthemes theme_clean
 #' @importFrom ggplot2 ggplot aes geom_boxplot geom_point geom_smooth facet_wrap
 #' @export
-#' @examples
-#' x <- sample(1:250, 50)
-#' y <- sample(c("A","B", "C"), 50, replace=T)
-#' z <- sample(c("LOW","MED","HIGH"), 50, replace=T)
-#' w <- sample(1:250, 50)
-#' df <- data.frame(x=x, y=y, z=z, w=w)
-#'
-#' ggplot(df, aes(x=y, y=x, fill=z)) + geom_boxplot() + theme_green()
-#' ggplot(df, aes(x=x, y=w, color=y)) + geom_point() + geom_smooth(method="lm") + theme_green()
 #'
 theme_green <- function(){
   #set up fonts
@@ -193,15 +184,6 @@ theme_green <- function(){
 #' @importFrom ggplot2 ggplot aes geom_boxplot geom_point geom_smooth facet_wrap
 #' @export
 #'
-#' @examples
-#' x <- sample(1:250, 50)
-#' y <- sample(c("A","B", "C"), 50, replace=T)
-#' z <- sample(c("LOW","MED","HIGH"), 50, replace=T)
-#' w <- sample(1:250, 50)
-#' df <- data.frame(x=x, y=y, z=z, w=w)
-#'
-#' ggplot(df, aes(x=y, y=x, fill=z)) + geom_boxplot() + theme_pub()
-#' ggplot(df, aes(x=x, y=w, color=y)) + geom_point() + geom_smooth(method="lm") + theme_pub()
 theme_pub <- function(){
   ggthemes::theme_clean() %+replace%
     ggplot2::theme(
