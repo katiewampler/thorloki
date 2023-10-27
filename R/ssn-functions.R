@@ -84,8 +84,8 @@ check_model <- function(model, response){
   plots[[6]] <- R2
 
   #get nugget
-  var_comp <- SSN:varcomp(model)
-  plots[[7]] <- SSN::varcomp(model)[which(var_comp$VarComp=="Nugget"),2]
+  var_comp <- SSN::varcomp(model)
+  plots[[7]] <- var_comp[which(var_comp$VarComp=="Nugget"),2]
 
   return(plots)
 }
