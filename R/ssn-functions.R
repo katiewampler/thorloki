@@ -34,7 +34,8 @@ check_model <- function(model, response){
   plots[[2]] <- ggplot2::ggplot(data=obs_resid, aes(x=`_resid.stand_`)) + ggplot2::geom_histogram(bins=15)
 
   #get residuals with explanatory variables
-  model_sum <- summary(model)$fixed.effects.estimates$FactorLevel
+  model_sum <- str_split2(as.character(model$args$formula)[3], pattern="[ + ]")
+  model_sum <- subset(model_sum, model_sum != "")
   resid_plots <- list()
   for(x in 2:length(model_sum)){
     var <- model_sum[x]
@@ -74,11 +75,16 @@ check_model <- function(model, response){
 
   outliers <- subset(cv.out, cv.out$pid %in% pot_outlier$pid)
   outliers <- merge(outliers, pot_outlier[,1:2], by="pid")
-  plots[[4]] <- ggplot2::ggplot(cv.out, aes(x=observe, y=predict)) + ggplot2::geom_point() +
+  plots[[4]] <- ggplot2::ggplot(cv.out, aes(x=observe, y=predict)) +
+    ggplot2::geom_point(alpha=0.5) +
     ggplot2::geom_abline (slope=1, linetype = "dashed", color="Red") +
     ggplot2::geom_point(data=outliers, aes(x=observe, y=predict), color="red3") +
-    ggplot2::geom_text(data=outliers, aes(x=observe, y=predict, label=pid),
-              hjust=1.1, vjust=1.1, size=3)
+    ggplot2::geom_text(data=outliers, aes(x=observe, y=predict, label=SITE),
+                       vjust=1.1,hjust="inward", size=3) +
+    labs(x=expression(bold("Observed DOC ("*mg*L^{-1}*")")),
+         y=expression(bold("Predicted DOC ("*mg*L^{-1}*")"))) +
+    theme_pub() + theme(axis.title = element_text(face="bold"))
+
   #get R2
   R2 <- caret::R2(cv.out$predict, cv.out$observe)
   plots[[6]] <- R2
@@ -202,6 +208,58 @@ plot_ssn <- function(ssn_obj, sites=c("sites", "preds"),
   }
   streams <- sf::read_sf(paste(loc, "edges.shp", sep="/"))
 
+  if(scale=="binned"){
+    #get data bins
+    #get bins
+    if(bin_method == "jenks"){
+      breaks <- BAMMtools::getJenksBreaks(vals, nbins+1)
+    }else if(bin_method == "quantile"){
+      breaks <- unique(quantile(vals, prob = seq(0, 1, 1/(nbins))))
+    }else{
+      stop("please choose either jenks or quantile for binning method")
+    }
+
+    #add zero to breaks
+    #if endpoint is less than zero, add that, otherwise zero
+    start <- min(.floor_dec(min(vals), prec), 0)
+    #round make cutoff nicer
+    breaks <- .ceiling_dec(breaks, prec)
+    breaks <- c(start, breaks[-1])
+
+    #get color palette
+    if(palette == "parula"){
+      colors <- pals::parula(n=nbins)
+    }else if(palette == "ocean.haline"){
+      colors <- pals::ocean.haline(n=nbins)
+    }else if(palette == "cubicl"){
+      colors <- pals::cubicl(n=nbins)
+    }else if(palette == "kovesi.rainbow"){
+      colors <- pals::kovesi.rainbow(n=nbins)
+    }else if(palette == "katie_pal"){
+      katie <- grDevices::colorRampPalette(c("#d9ead3","#274e13"))
+      colors <- katie(nbins)
+    }else{
+      stop("Please choose 'parula', 'ocean.haline', 'cubehelix', or 'kovesi.rainbow'")
+    }
+
+    #create labels
+    labs_df <- data.frame(start=breaks)
+    labs_df$end <- c(labs_df$start[2:nrow(labs_df)], NA)
+    labs_df <- labs_df[-nrow(labs_df),]
+    if(max(plot_data$val) < 1){
+      labs_df$start <- sprintf(paste("%.", (max(nchar(labs_df$start))-2), "f", sep=""), labs_df$start)
+      labs_df$end <- sprintf(paste("%.", (max(nchar(labs_df$end), na.rm=T)-2), "f", sep=""), labs_df$end)
+    }
+    labs_df$label <- paste(as.character(labs_df$start), as.character(labs_df$end), sep="-")
+    labs <- labs_df$label
+    labs[1] <- paste("<", labs_df$end[1], sep="")
+    breaks <- c(as.numeric(labs_df$start),labs_df$end[nrow(labs_df)])
+
+    #ensure the colors go to the right break
+    labs_df$break_group <- paste("(",labs_df$start, ",",labs_df$end, "]", sep="")
+    names(colors) <- labs_df$break_group
+  }
+
   #get plotting info
   plots <- list()
   for(i in 1:length(sites)){
@@ -222,18 +280,18 @@ plot_ssn <- function(ssn_obj, sites=c("sites", "preds"),
     if(length(unique(df$size))> 1){
       #get bins
       if(bin_method == "jenks"){
-        breaks <- BAMMtools::getJenksBreaks(df$size, 6)
+        size_breaks <- BAMMtools::getJenksBreaks(df$size, 6)
       }else if(bin_method == "quantile"){
-        breaks <- unique(quantile(df$size, prob = seq(0, 1, 1/(6))))
+        size_breaks <- unique(quantile(df$size, prob = seq(0, 1, 1/(6))))
       }else{
         stop("please choose either jenks or quantile for binning method")
       }
 
       #round make cutoff nicer
-      breaks <- .floor_dec(breaks, prec)
+      size_breaks <- .floor_dec(size_breaks, prec)
 
       #create labels
-      labs_df <- data.frame(start=breaks)
+      labs_df <- data.frame(start=size_breaks)
       labs_df$end <- c(labs_df$start[2:nrow(labs_df)], NA)
       labs_df <- labs_df[-nrow(labs_df),]
       if(max(plot_data$val) < 1){
@@ -246,60 +304,18 @@ plot_ssn <- function(ssn_obj, sites=c("sites", "preds"),
     }
 
     if(scale == "binned"){
-      #get bins
-      if(bin_method == "jenks"){
-        breaks <- BAMMtools::getJenksBreaks(vals, nbins+1)
-      }else if(bin_method == "quantile"){
-        breaks <- unique(quantile(vals, prob = seq(0, 1, 1/(nbins))))
-      }else{
-        stop("please choose either jenks or quantile for binning method")
-      }
-
-      #add zero to breaks
-      #if endpoint is less than zero, add that, otherwise zero
-      start <- min(.floor_dec(min(vals), prec), 0)
-      #round make cutoff nicer
-      breaks <- .ceiling_dec(breaks, prec)
-      breaks <- c(start, breaks[-1])
-
-      #get color palette
-      if(palette == "parula"){
-        colors <- pals::parula(n=nbins)
-      }else if(palette == "ocean.haline"){
-        colors <- pals::ocean.haline(n=nbins)
-      }else if(palette == "cubicl"){
-        colors <- pals::cubicl(n=nbins)
-      }else if(palette == "kovesi.rainbow"){
-        colors <- pals::kovesi.rainbow(n=nbins)
-      }else if(palette == "katie_pal"){
-        katie <- grDevices::colorRampPalette(c("#d9ead3","#274e13"))
-        colors <- katie(nbins)
-      }else{
-        stop("Please choose 'parula', 'ocean.haline', 'cubehelix', or 'kovesi.rainbow'")
-      }
-
       #bin data
-      plot_data <- plot_data %>% mutate(bins = cut(val, breaks = breaks))
+      plot_data <- plot_data %>% mutate(bins = cut(val, breaks = c(breaks)))
 
-      #create labels
-      labs_df <- data.frame(start=breaks)
-      labs_df$end <- c(labs_df$start[2:nrow(labs_df)], NA)
-      labs_df <- labs_df[-nrow(labs_df),]
-      if(max(plot_data$val) < 1){
-        labs_df$start <- sprintf(paste("%.", (max(nchar(labs_df$start))-2), "f", sep=""), labs_df$start)
-        labs_df$end <- sprintf(paste("%.", (max(nchar(labs_df$end), na.rm=T)-2), "f", sep=""), labs_df$end)
-      }
-      labs_df$label <- paste(as.character(labs_df$start), as.character(labs_df$end), sep="-")
-      labs <- labs_df$label
-      labs[1] <- paste("<", labs_df$end[1], sep="")
-      breaks <- as.numeric(labs_df$start)
+      #fix labels
+      cut_labs <- labs[which(names(colors) %in% plot_data$bins)]
 
       #binned
       if(length(unique(df$size))==1){
-        plot_spec <- list(streams=streams, data=plot_data, colors=colors, size=as.numeric(df$size[1]),color_labs=labs,  size_breaks=NA, size_labs=NA,x_extent=x_lim, y_extent=y_lim)
+        plot_spec <- list(streams=streams, data=plot_data, colors=colors, size=as.numeric(df$size[1]),color_labs=cut_labs,  size_breaks=NA, size_labs=NA,x_extent=x_lim, y_extent=y_lim)
 
       }else{
-        plot_spec <- list(streams=streams, data=plot_data, colors=colors, size=NA, color_labs=labs, size_breaks=size_breaks, size_labs=size_labs, x_extent=x_lim, y_extent=y_lim)
+        plot_spec <- list(streams=streams, data=plot_data, colors=colors, size=NA, color_labs=cut_labs, size_breaks=size_breaks, size_labs=size_labs, x_extent=x_lim, y_extent=y_lim)
       }
 
     }else{
@@ -336,7 +352,6 @@ plot_ssn <- function(ssn_obj, sites=c("sites", "preds"),
   return(plots)
 
 }
-
 
 #' Plot glmssn residuals in ggplot2
 #'
@@ -391,6 +406,7 @@ plot_ssn_resid <- function(model, sites="sites.shp", size="_resid_"){
 #' @param dataset the ssn object being modeled
 #' @param corModels all the variance structures you want tested (tail up, tail down, euclidian)
 #' @param addfunccol the additive function column
+#' @param random a character vector of random effects (the column name)
 #'
 #' @import SSN
 #' @importFrom utils txtProgressBar setTxtProgressBar combn
@@ -405,7 +421,8 @@ plot_ssn_resid <- function(model, sites="sites.shp", size="_resid_"){
 #'
 best_var <- function(formula, dataset,
                      corModels= c("Exponential.tailup", "Exponential.taildown","Exponential.Euclid"),
-                     addfunccol = "afvArea"){
+                     addfunccol = "afvArea",
+                     random=NULL){
   possible_mods <- do.call("c", lapply(seq_along(corModels), function(i) utils::combn(corModels, i, FUN = list)))
 
   #add progress bar
@@ -415,7 +432,7 @@ best_var <- function(formula, dataset,
   #run through all models
   for(x in 1:length(possible_mods)){
     model <- SSN::glmssn(formula, dataset,
-                    CorModels = possible_mods[[x]],
+                    CorModels = c(possible_mods[[x]], random),
                     addfunccol= addfunccol)
     models[[x]] <- model
     utils::setTxtProgressBar(pb,x)
@@ -438,9 +455,6 @@ best_var <- function(formula, dataset,
       paste("RMSPE: (",which(fits$Variance_Components == best_RMSPE), ") ", best_RMSPE, sep=""), sep="\n")
 }
 
-
-
-
 #' Test all potential types of variance structures
 #'
 #' @param formula the best fitting varaibles from glmssn model
@@ -448,7 +462,8 @@ best_var <- function(formula, dataset,
 #' @param corstr the types of autocorrelation to include
 #' @param cortype the types of autocorrelation models
 #' @param addfunccol additive function column
-#'
+#' @param random a character vector of random effects (the column name)
+
 #' @import dplyr
 #' @import SSN
 #' @importFrom tidyr expand
@@ -466,10 +481,17 @@ best_var_str <- function(formula, dataset,
                          corstr=c("tailup", "taildown","Euclid"),
                          cortype=c("Exponential", "LinearSill","Spherical",
                                    "Mariah", "Epanech","Cauchy", "Gaussian"),
-                         addfunccol = "afvArea"){
+                         addfunccol = "afvArea",
+                         random=NULL){
   stopifnot(corstr %in% c("tailup", "taildown","Euclid"),
             cortype %in% c("Exponential", "LinearSill","Spherical","Mariah", "Epanech","Cauchy" , "Gaussian"))
   cor1 <- cor2 <- cor3 <- NULL
+
+  #remove models that have incompatible model/type
+  invalid <- c(paste(c("Epanech", "LinearSill", "Mariah"),".Euclid", sep=""),
+               paste(c("Cauchy", "Gaussian"), ".tailup", sep=""),
+               paste(c("Cauchy", "Gaussian"), ".taildown", sep=""))
+
   #for each type of corstr, get all options
   if(length(corstr) == 1){
     corModels <- data.frame(cor1=paste(cortype, corstr, sep="."))
@@ -486,10 +508,9 @@ best_var_str <- function(formula, dataset,
     corModels <- corModels %>% tidyr::expand(cor1, cor2, cor3)
   }
 
-  #remove models that have incompatible model/type
-  invalid <- c(paste(c("Epanech", "LinearSill", "Mariah"),".Euclid", sep=""),
-               paste(c("Cauchy", "Gaussian"), ".tailup", sep=""),
-               paste(c("Cauchy", "Gaussian"), ".taildown", sep=""))
+  possible_mods <- do.call("c", lapply(seq_along(corModels), function(i) utils::combn(corModels, i, FUN = list)))
+
+
 
 
   corModels <- subset(corModels, !(corModels$cor1 %in% invalid))
@@ -509,7 +530,7 @@ best_var_str <- function(formula, dataset,
   #run through all models
   for(x in 1:nrow(corModels)){
     model <- SSN::glmssn(formula, dataset,
-                    CorModels = unname(as.character(corModels[x,])),
+                    CorModels = c(unname(as.character(corModels[x,])),random),
                     addfunccol= addfunccol)
     models[[x]] <- model
     utils::setTxtProgressBar(pb,x)
@@ -535,6 +556,108 @@ best_var_str <- function(formula, dataset,
 
 }
 
+best_var_str <- function(formula, dataset,
+                         corstr=c("tailup", "taildown","Euclid"),
+                         cortype=c("Exponential", "LinearSill","Spherical",
+                                   "Mariah", "Epanech","Cauchy", "Gaussian"),
+                         addfunccol = "afvArea",
+                         random=NULL){
+  stopifnot(corstr %in% c("tailup", "taildown","Euclid"),
+            cortype %in% c("Exponential", "LinearSill","Spherical","Mariah", "Epanech","Cauchy" , "Gaussian"))
+  cor1 <- cor2 <- cor3 <- NULL
+
+  #remove models that have incompatible model/type
+  invalid <- c(paste(c("Epanech", "LinearSill", "Mariah"),".Euclid", sep=""),
+               paste(c("Cauchy", "Gaussian"), ".tailup", sep=""),
+               paste(c("Cauchy", "Gaussian"), ".taildown", sep=""))
+
+  #for each type of corstr, get all options
+  if(length(corstr) == 1){
+    corModels <- data.frame(cor1=paste(cortype, corstr, sep="."))
+  }else if(length(corstr) == 2){
+    corModels1 <- c(paste(cortype, corstr[1], sep="."), NA)
+    corModels2 <- c(paste(cortype, corstr[2], sep="."), NA)
+    corModels <- data.frame(cor1=corModels1, cor2=corModels2)
+    corModels <- corModels %>% tidyr::expand(cor1, cor2)
+  }else if(length(corstr) == 3){
+    corModels1 <- c(paste(cortype, corstr[1], sep="."),NA)
+    corModels2 <- c(paste(cortype, corstr[2], sep="."),NA)
+    corModels3 <- c(paste(cortype, corstr[3], sep="."), NA)
+    corModels <- data.frame(cor1=corModels1, cor2=corModels2, cor3=corModels3)
+    corModels <- corModels %>% tidyr::expand(cor1, cor2, cor3)
+  }
+
+  corModels <- subset(corModels, !(corModels$cor1 %in% invalid))
+  if(ncol(corModels) > 1){
+    corModels <- subset(corModels, !(corModels$cor2 %in% invalid))}
+  if(ncol(corModels) > 2){
+    corModels <- subset(corModels, !(corModels$cor3 %in% invalid))}
+
+  #remove row with full NA's
+  corModels <- subset(corModels, !(is.na(corModels$cor1)==T & is.na(corModels$cor2)==T & is.na(corModels$cor3)==T))
+
+  #make df into characters
+  corModels <- data.frame(lapply(corModels, as.character), stringsAsFactors=FALSE)
+
+  #try all the models
+  #add progress bar
+  pb <- utils::txtProgressBar(min = 0,max = nrow(corModels), style = 3,char = "=")
+
+  models <- list()
+  error <- vector() #catch error runs
+  catch_errors <- function(y){
+    tryCatch(
+      {
+        model = SSN::glmssn(formula, dataset,
+                            CorModels = y,
+                            addfunccol= addfunccol)
+        return(model)
+      },
+      error=function(e) {
+        model=e
+        error <- c(error, x)
+        return(model)
+      },
+      warning=function(w) {
+        model=w
+        return(model)
+      }
+    )
+  } #catch errors without failing the loop
+  #run through all models
+  for(x in 19:nrow(corModels)){
+    x_cormodels <- c(unname(as.character(corModels[x,])),random)
+    x_cormodels <- x_cormodels[is.na(x_cormodels)==F]
+
+    model <- catch_errors(x_cormodels)
+    if(class(model)[1] != "glmssn"){error <- c(error, x)}
+    models[[x]] <- model
+    utils::setTxtProgressBar(pb,x)
+  }
+  close(pb)
+
+  #remove errors
+  models <- models[-error]
+
+  #compare the fits
+  fits <- SSN::InfoCritCompare(models)
+
+  fits$easy_names <-  sapply(1:nrow(fits), function(x){
+    name <- str_split2(fits$Variance_Components[x], "[+]")
+    name <- name[1:(length(name)-1)]
+    name <- stringr::str_replace_all(name, " ", "")
+    name <- paste(name, collapse=",")})
+  fits <- fits[,c(3,5,8,11:14)]
+  best_AIC <- fits$Variance_Components[fits$AIC == min(fits$AIC)]
+  best_RMSPE <- fits$Variance_Components[fits$RMSPE == min(fits$RMSPE)]
+
+  cat("The best variance models are:",
+      paste("AIC: (", which(fits$Variance_Components == best_AIC), ") ", best_AIC, sep=""),
+      paste("RMSPE: (",which(fits$Variance_Components == best_RMSPE), ") ", best_RMSPE, sep=""), sep="\n")
+
+  return(fits)
+
+}
 
 #' Plot and report variable importance based on standarized linear regression coefficients
 #'
@@ -571,10 +694,14 @@ var_imp <- function(model){
   vals$direction <- "positive"
   vals$direction[vals$Estimate <0 ] <- "negative"
   vals$direction <- factor(vals$direction, levels=c("positive", "negative"), ordered=T)
-  vals$lower <- ifelse(vals$Estimate < 0 , vals$Estimate + vals$std.err, vals$Estimate - vals$std.err)
-  vals$higher <- ifelse(vals$Estimate < 0 , vals$Estimate - vals$std.err, vals$Estimate + vals$std.err)
-  #vals$lower[(vals$lower > 0 & vals$higher < 0) |(vals$lower < 0 & vals$higher > 0)] <- NA
-  #vals$higher[(vals$lower > 0 & vals$higher < 0) |(vals$lower < 0 & vals$higher > 0)] <- NA
+  vals$lower <- NA
+  vals$higher <- NA
+  for(x in 1:nrow(vals)){
+    ci1 <- vals$Estimate[x] + vals$std.err[x]
+    ci2 <- vals$Estimate[x] - vals$std.err[x]
+    vals$lower[x] <- min(c(ci1, ci2))
+    vals$higher[x] <- max(c(ci1,ci2))
+  }
 
   vals <- merge(vals, nice_names, by.x="FactorLevel", by.y="vars")
   plot <- ggplot2::ggplot(vals, aes(y=stats::reorder(nice_name,abs(Estimate)), x=Estimate,
@@ -615,7 +742,7 @@ burn_impact <- function(model){
   low <- c(lowerslope,slope,upperslope)*320
   moderate <-c(lowerslope,slope,upperslope)*660
   high <- c(lowerslope,slope,upperslope)*772
-  fire <- data.frame(severity_group = c("unburned","low","moderate","high"),
+  fire <- data.frame(severity_group = c("Unburned","Low","Moderate","High"),
                      min_change_L95 = c(0,unburned[1],low[1], moderate[1]),
                      min_change = c(0,unburned[2],low[2], moderate[2]),
                      min_change_U95 = c(0,unburned[3],low[3], moderate[3]),
