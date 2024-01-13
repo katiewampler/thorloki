@@ -17,7 +17,6 @@
 #' (5) is plots of the explanatory variables vs the standarized residuals (currently only works with continous variables)
 #' (6) is the R-squared value for the cross validation plot
 #' (7) is the unexplained variance (the nugget) after accounting for the spatial autocorrelation and covariates
-#' @export
 #'
 check_model2 <- function(model, response){
   '_resid.stand_' <- exp_var <- residuals <- observe <- predict <- pid <- NULL
@@ -414,7 +413,7 @@ plot_ssn_resid2 <- function(model, sites="sites.shp", size="_resid_"){
 #' \dontrun{
 #' best_var(DOC_mgL ~ PRECIP + BFI + AWC + AREA_km2 + sev, fall_ssn)}
 #'
-best_var2 <- function(formula, dataset,
+best_var_2 <- function(formula, dataset,
                      tailup_type = "exponential",
                      taildown_type = "exponential",
                      euclid_type = "exponential",
