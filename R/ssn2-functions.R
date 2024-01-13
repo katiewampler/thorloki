@@ -1,11 +1,11 @@
-#new/updated SSN functions
+#new/updated SSN functions to run with SSN2 package
 
 #' Run checks on SSN models
 #'
 #' @param model the fitted glmssn model
 #' @param response the variable of interest
 #'
-#' @import SSN
+#' @import SSN2
 #' @import ggplot2
 #' @importFrom caret R2
 #' @importFrom patchwork wrap_plots
@@ -19,14 +19,14 @@
 #' (7) is the unexplained variance (the nugget) after accounting for the spatial autocorrelation and covariates
 #' @export
 #'
-check_model <- function(model, response){
+check_model2 <- function(model, response){
   '_resid.stand_' <- exp_var <- residuals <- observe <- predict <- pid <- NULL
   #create list to hold plots
   plots <- list()
   dataset <- model$ssn.object
 
   #get residuals
-  resid <- SSN::residuals.glmssn(model)
+  resid <- SSN2::residuals.glmssn(model)
   obs_resid <- getSSNdata.frame(resid)
 
   #see residuals
@@ -67,8 +67,8 @@ check_model <- function(model, response){
 
   #see the model fit
   #get observations
-  obs <- SSN::getSSNdata.frame(dataset)
-  cv.out <- SSN::CrossValidationSSN(model)
+  obs <- SSN2::getSSNdata.frame(dataset)
+  cv.out <- SSN2::CrossValidationSSN(model)
   cols <- c(which(colnames(obs) == "pid"), which(colnames(obs) == response))
   cv.out <- merge(cv.out, obs[,cols], by="pid")
   colnames(cv.out)<- c("pid","predict", "se","observe")
@@ -90,19 +90,19 @@ check_model <- function(model, response){
   plots[[6]] <- R2
 
   #get nugget
-  var_comp <- SSN::varcomp(model)
+  var_comp <- SSN2::varcomp(model)
   plots[[7]] <- var_comp[which(var_comp$VarComp=="Nugget"),2]
 
   return(plots)
 }
 
-#' plot SSN data
+#' plot SSN data (updated for SSN2)
 #'
 #' takes either a glmssn fit or a glmssn.predict as an input and returns a list of the
 #' items needed to make a nice clean map of the data. If you use multiple datasets it
 #' will set them on a single scale for comparison accross the maps.
 #'
-#' @import SSN
+#' @import SSN2
 #' @import dplyr
 #' @importFrom sf read_sf
 #' @importFrom raster extent
@@ -111,7 +111,7 @@ check_model <- function(model, response){
 #' @importFrom grDevices colorRampPalette
 #' @importFrom stats na.omit
 #'
-#' @param ssn_obj a list of glmssn fit or a glmssn.predict objects
+#' @param ssn_obj a list or individual ssn_glm or ssn_lm object
 #' @param sites a vector of sites names, should match the ssn.ssn file names
 #' @param type a vector of the type of data being plotted, should be either "obs" or "pred"
 #' @param response the variable to plot as a character
@@ -123,9 +123,8 @@ check_model <- function(model, response){
 #' @param bin_method either "jenks" or "quantile"
 #'
 #' @return a list of the items needed to make a nice clean map of the data
-#' @export
 #'
-plot_ssn <- function(ssn_obj, sites=c("sites", "preds"),
+plot_ssn2 <- function(ssn_obj, sites=c("sites", "preds"),
                      type=c("obs", "pred"),
                      response =c("DOC_mgL", "DOC_mgL"),
                      size=c(2, "se"),
@@ -138,6 +137,31 @@ plot_ssn <- function(ssn_obj, sites=c("sites", "preds"),
             class(nbins) == "numeric",
             bin_method %in% c("jenks", "quantile"))
 
+  val <- NULL
+  #functions to make breaks and labels
+  .place_val <- function(x) {
+    stopifnot(class(x)=="numeric")
+    place <- 0
+    x <- abs(x)
+    if(x == 1){
+      place <- 1
+    }
+    else if(abs(x) > 1){
+      while(x > 1){
+        x <- x/10
+        place <- place + 1
+      }
+    }else{
+      while(x < 1){
+        x <- x*10
+        place <- place - 1
+      }}
+    place
+
+  } #finds place value of max to determine scale
+  .ceiling_dec <- function(x, level=-.place_val(x)) round(x + 5.0001*10^(-level-1), level) #ceiling function with decimal
+  .floor_dec <- function(x, level=-.place_val(x)) round(x - 5.0001*10^(-level-1), level) #ceiling function with decimal
+
   #reformat data
   clean_data <- list()
   #get min and max of both groups for plotting
@@ -146,22 +170,20 @@ plot_ssn <- function(ssn_obj, sites=c("sites", "preds"),
   vals <- vector()
   for(x in 1:length(type)){
     if(type[x] == "obs"){
-      df <- getSSNdata.frame(ssn_obj[[x]], Name="Obs")
+      df <- SSN2::ssn_get_data(ssn_obj[[x]])
       plot_var_index <- which(colnames(df) == response[x])
       data <- df[,c(which(colnames(df)=="pid"),plot_var_index)]
-      data <- na.omit(data)
+      data <- stats::na.omit(data)
       data$size <- size[x]
+      data <- st_drop_geometry(data)
       colnames(data) <- c("pid", "val", "size")
       clean_data[[x]] <- data
       min <- c(min, min(data$val))
       max <- c(max, max(data$val))
       vals <- c(vals, data$val)
     }else if(type[x]== "pred"){
-      pred_points <- getSSNdata.frame(ssn_obj[[x]], Name=sites[x])
-      #rename reponse and se
-      colnames(pred_points)[which(colnames(pred_points) == response[x])] <- "preds"
-      colnames(pred_points)[which(colnames(pred_points) == "preds")+1] <- "se"
-
+      pred_points <- SSN2::ssn_get_data(ssn_obj[[x]], name=sites[x])
+      pred_points <- st_drop_geometry(pred_points)
       data <- data.frame(pid=pred_points[,which(colnames(pred_points)=="pid")],
                          val=pred_points$preds, size=pred_points$se)
       clean_data[[x]] <- data
@@ -173,15 +195,67 @@ plot_ssn <- function(ssn_obj, sites=c("sites", "preds"),
 
   min <- min(min, na.rm=T)
   max <- max(max, na.rm=T)
-  vals <- na.omit(vals) #to prevent errors
+  vals <- stats::na.omit(vals) #to prevent errors
 
   #get streams
-  if(length(which(type=="obs")!= 0)){
-    loc <- ssn_obj[[which(type=="obs")[1]]]@path
+  if(length(which(type=="obs"))!= 0){
+    loc <- ssn_obj[[which(type=="obs")[1]]]$path
   }else{
-    loc <- ssn_obj[[which(type=="pred")[1]]][["ssn.object"]]@path
+    loc <- ssn_obj[[which(type=="pred")[1]]][["ssn.object"]]$path
   }
-  streams <- read_sf(paste(loc, "edges.shp", sep="/"))
+  streams <- sf::read_sf(paste(loc, "edges.shp", sep="/"))
+
+  if(scale=="binned"){
+    #get data bins
+    #get bins
+    if(bin_method == "jenks"){
+      breaks <- BAMMtools::getJenksBreaks(vals, nbins+1)
+    }else if(bin_method == "quantile"){
+      breaks <- unique(quantile(vals, prob = seq(0, 1, 1/(nbins))))
+    }else{
+      stop("please choose either jenks or quantile for binning method")
+    }
+
+    #add zero to breaks
+    #if endpoint is less than zero, add that, otherwise zero
+    start <- min(.floor_dec(min(vals), prec), 0)
+    #round make cutoff nicer
+    breaks <- .ceiling_dec(breaks, prec)
+    breaks <- c(start, breaks[-1])
+
+    #get color palette
+    if(palette == "parula"){
+      colors <- pals::parula(n=nbins)
+    }else if(palette == "ocean.haline"){
+      colors <- pals::ocean.haline(n=nbins)
+    }else if(palette == "cubicl"){
+      colors <- pals::cubicl(n=nbins)
+    }else if(palette == "kovesi.rainbow"){
+      colors <- pals::kovesi.rainbow(n=nbins)
+    }else if(palette == "katie_pal"){
+      katie <- grDevices::colorRampPalette(c("#d9ead3","#274e13"))
+      colors <- katie(nbins)
+    }else{
+      stop("Please choose 'parula', 'ocean.haline', 'cubehelix', or 'kovesi.rainbow'")
+    }
+
+    #create labels
+    labs_df <- data.frame(start=breaks)
+    labs_df$end <- c(labs_df$start[2:nrow(labs_df)], NA)
+    labs_df <- labs_df[-nrow(labs_df),]
+    if(max(vals) < 1){
+      labs_df$start <- sprintf(paste("%.", (max(nchar(labs_df$start))-2), "f", sep=""), labs_df$start)
+      labs_df$end <- sprintf(paste("%.", (max(nchar(labs_df$end), na.rm=T)-2), "f", sep=""), labs_df$end)
+    }
+    labs_df$label <- paste(as.character(labs_df$start), as.character(labs_df$end), sep="-")
+    labs <- labs_df$label
+    labs[1] <- paste("<", labs_df$end[1], sep="")
+    breaks <- c(as.numeric(labs_df$start),labs_df$end[nrow(labs_df)])
+
+    #ensure the colors go to the right break
+    labs_df$break_group <- paste("(",labs_df$start, ",",labs_df$end, "]", sep="")
+    names(colors) <- labs_df$break_group
+  }
 
   #get plotting info
   plots <- list()
@@ -189,32 +263,32 @@ plot_ssn <- function(ssn_obj, sites=c("sites", "preds"),
     #get data
     df <- clean_data[[i]]
 
-    site_data <- read_sf(paste(loc, "/", sites[i], ".shp", sep=""))
+    site_data <- sf::read_sf(paste(loc, "/", sites[i], ".shp", sep=""))
 
     #merge sites with data to plot
     plot_data <- merge(site_data, df, by="pid")
 
     #crop to area of interest
-    area<- extent(plot_data)
-    x_lim <- c(area[1]-(area[2]-area[1])*.06, area[2]+(area[2]-area[1])*.14)
+    area<- raster::extent(plot_data)
+    x_lim <- c(area[1]-(area[2]-area[1])*.1, area[2]+(area[2]-area[1])*.1)
     y_lim <- c(area[3]-(area[4]-area[3])*.1, area[4]+(area[4]-area[3])*.1)
 
     #format SE sizes
     if(length(unique(df$size))> 1){
       #get bins
       if(bin_method == "jenks"){
-        breaks <- getJenksBreaks(df$size, 6)
+        size_breaks <- BAMMtools::getJenksBreaks(df$size, 6)
       }else if(bin_method == "quantile"){
-        breaks <- unique(quantile(df$size, prob = seq(0, 1, 1/(6))))
+        size_breaks <- unique(quantile(df$size, prob = seq(0, 1, 1/(6))))
       }else{
         stop("please choose either jenks or quantile for binning method")
       }
 
       #round make cutoff nicer
-      breaks <- .floor_dec(breaks, prec)
+      size_breaks <- .floor_dec(size_breaks, prec)
 
       #create labels
-      labs_df <- data.frame(start=breaks)
+      labs_df <- data.frame(start=size_breaks)
       labs_df$end <- c(labs_df$start[2:nrow(labs_df)], NA)
       labs_df <- labs_df[-nrow(labs_df),]
       if(max(plot_data$val) < 1){
@@ -227,77 +301,11 @@ plot_ssn <- function(ssn_obj, sites=c("sites", "preds"),
     }
 
     if(scale == "binned"){
-      #get bins
-      if(bin_method == "jenks"){
-        breaks <- getJenksBreaks(vals, nbins+1)
-      }else if(bin_method == "quantile"){
-        breaks <- unique(quantile(vals, prob = seq(0, 1, 1/(nbins))))
-      }else{
-        stop("please choose either jenks or quantile for binning method")
-      }
-
-      #functions to make breaks and labels
-      .place_val <- function(x) {
-        stopifnot(class(x)=="numeric")
-        place <- 0
-        x <- abs(x)
-        if(x == 1){
-          place <- 1
-        }
-        else if(abs(x) > 1){
-          while(x > 1){
-            x <- x/10
-            place <- place + 1
-          }
-        }else{
-          while(x < 1){
-            x <- x*10
-            place <- place - 1
-          }}
-        place
-
-      } #finds place value of max to determine scale
-      .ceiling_dec <- function(x, level=-.place_val(x)) round(x + 5.0001*10^(-level-1), level) #ceiling function with decimal
-      .floor_dec <- function(x, level=-.place_val(x)) round(x - 5.0001*10^(-level-1), level) #ceiling function with decimal
-
-      #add zero to breaks
-      #if endpoint is less than zero, add that, otherwise zero
-      start <- min(.floor_dec(min(vals), prec), 0)
-      #round make cutoff nicer
-      breaks <- .ceiling_dec(breaks, prec)
-      breaks <- c(start, breaks[-1])
-
-      #get color palette
-      if(palette == "parula"){
-        colors <- pals::parula(n=nbins)
-      }else if(palette == "ocean.haline"){
-        colors <- pals::ocean.haline(n=nbins)
-      }else if(palette == "cubicl"){
-        colors <- pals::cubicl(n=nbins)
-      }else if(palette == "kovesi.rainbow"){
-        colors <- pals::kovesi.rainbow(n=nbins)
-      }else if(palette == "katie_pal"){
-        katie <- colorRampPalette(c("#d9ead3","#274e13"))
-        colors <- katie(nbins)
-      }else{
-        stop("Please choose 'parula', 'ocean.haline', 'cubehelix', or 'kovesi.rainbow'")
-      }
-
       #bin data
-      plot_data <- plot_data %>% mutate(bins = cut(val, breaks = breaks))
+      plot_data <- plot_data %>% mutate(bins = cut(val, breaks = c(breaks)))
 
-      #create labels
-      labs_df <- data.frame(start=breaks)
-      labs_df$end <- c(labs_df$start[2:nrow(labs_df)], NA)
-      labs_df <- labs_df[-nrow(labs_df),]
-      if(max(plot_data$val) < 1){
-        labs_df$start <- sprintf(paste("%.", (max(nchar(labs_df$start))-2), "f", sep=""), labs_df$start)
-        labs_df$end <- sprintf(paste("%.", (max(nchar(labs_df$end), na.rm=T)-2), "f", sep=""), labs_df$end)
-      }
-      labs_df$label <- paste(as.character(labs_df$start), as.character(labs_df$end), sep="-")
-      labs <- labs_df$label
-      labs[1] <- paste("<", labs_df$end[1], sep="")
-      breaks <- as.numeric(labs_df$start)
+      #fix labels
+      #cut_labs <- labs[which(names(colors) %in% plot_data$bins)]
 
       #binned
       if(length(unique(df$size))==1){
@@ -318,7 +326,7 @@ plot_ssn <- function(ssn_obj, sites=c("sites", "preds"),
       }else if(palette == "kovesi.rainbow"){
         colors <- pals::kovesi.rainbow(100)
       }else if(palette == "katie_pal"){
-        katie <- colorRampPalette(c("#d9ead3","#274e13"))
+        katie <- grDevices::colorRampPalette(c("#d9ead3","#274e13"))
         colors <- katie(100)
       }else{
         stop("Please choose 'parula', 'ocean.haline', 'cubehelix', or 'kovesi.rainbow'")
@@ -347,7 +355,7 @@ plot_ssn <- function(ssn_obj, sites=c("sites", "preds"),
 #' Given a glmssn object, it will extract the residuals and plot as an
 #' ggplot
 #'
-#' @import SSN
+#' @import SSN2
 #' @importFrom sf read_sf
 #' @importFrom ggspatial annotation_scale
 #' @importFrom viridis scale_color_viridis
@@ -357,20 +365,19 @@ plot_ssn <- function(ssn_obj, sites=c("sites", "preds"),
 #' @param size the column used to determine the size of the points
 #'
 #' @return a ggplot object of residuals on the stream network
-#' @export
 #'
-plot_ssn_resid <- function(model, sites="sites.shp", size="_resid_"){
+plot_ssn_resid2 <- function(model, sites="sites.shp", size="_resid_"){
   color_col <- NULL
 
   dataset <- model$ssn.object
   loc <- dataset@path
-  obs <- SSN::getSSNdata.frame(dataset)
+  obs <- SSN2::getSSNdata.frame(dataset)
   streams <- sf::read_sf(paste(loc, "edges.shp", sep="/"))
   sites <- sf::read_sf(paste(loc, "sites.shp", sep="/"))
 
   #get residuals
-  resid <- SSN::residuals.glmssn(model)
-  plot_df <- SSN::getSSNdata.frame(resid)
+  resid <- SSN2::residuals.glmssn(model)
+  plot_df <- SSN2::getSSNdata.frame(resid)
 
   #merge sites with data to plot
   plot_data <- merge(sites, plot_df, by="pid")
@@ -389,29 +396,31 @@ plot_ssn_resid <- function(model, sites="sites.shp", size="_resid_"){
 
 
 
-#' Test multiple autocorrelation variance structures
+#' Test multiple autocorrelation variance structures (fixed with SSN2)
 #'
 #' @param formula the best fitting varaibles from glmssn model
 #' @param dataset the ssn object being modeled
 #' @param corModels all the variance structures you want tested (tail up, tail down, euclidian)
-#' @param addfunccol the additive function column
-#' @param random a character vector of random effects (the column name)
+#' @param addfunccol the additive function column, **currently broken, only uses afvArea
+#' @param random a formula (~Random), with the random variables you want to add
 #'
-#' @import SSN
+#' @import SSN2
 #' @importFrom utils txtProgressBar setTxtProgressBar combn
 #' @importFrom stringr str_replace_all
 #'
 #' @return a printout of the fits of the different models
-#' @export
 #'
 #' @examples
 #' \dontrun{
 #' best_var(DOC_mgL ~ PRECIP + BFI + AWC + AREA_km2 + sev, fall_ssn)}
 #'
-best_var <- function(formula, dataset,
-                     corModels= c("Exponential.tailup", "Exponential.taildown","Exponential.Euclid"),
+best_var2 <- function(formula, dataset,
+                     tailup_type = "exponential",
+                     taildown_type = "exponential",
+                     euclid_type = "exponential",
                      addfunccol = "afvArea",
                      random=NULL){
+  corModels <- paste(c("tailup_","taildown_", "euclid_"), c(tailup_type,taildown_type,euclid_type), sep="")
   possible_mods <- do.call("c", lapply(seq_along(corModels), function(i) utils::combn(corModels, i, FUN = list)))
 
   #add progress bar
@@ -420,16 +429,28 @@ best_var <- function(formula, dataset,
   models <- list()
   #run through all models
   for(x in 1:length(possible_mods)){
-    model <- SSN::glmssn(formula, dataset,
-                    CorModels = c(possible_mods[[x]], random),
-                    addfunccol= addfunccol)
+    cor <- possible_mods[[x]]
+    cor <- data.frame(type=str_split2(cor, "_", piece=1), model=str_split2(cor, "_", piece=2))
+    full_cor <- data.frame(type=c("tailup","taildown","euclid"))
+    full_cor <- merge(full_cor, cor, by="type", all=T)
+    full_cor$model[is.na(full_cor$model)==T] <- "none"
+    full_cor <- full_cor %>% arrange(factor(type, levels = c("tailup","taildown","euclid")))
+
+    model <- SSN2::ssn_lm(formula, dataset,
+                          tailup_type = full_cor$model[1],
+                          taildown_type = full_cor$model[2],
+                          euclid_type = full_cor$model[3],
+                          random= random,
+                    additive = "afvArea")
     models[[x]] <- model
     utils::setTxtProgressBar(pb,x)
   }
   close(pb)
   #compare the fits
-  fits <- SSN::InfoCritCompare(models)
-  best_AIC <- fits$Variance_Components[fits$AIC == min(fits$AIC)]
+  fits <- as.data.frame(t(sapply(models, SSN2::glance)))
+  fits2<- as.data.frame(t(sapply(models, SSN2::loocv)))
+  fits <- cbind(fits,fits2)
+  best_AIC <- models[[which(unlist(fits$AICc) == min(unlist(fits$AICc)))]]$formula
   best_RMSPE <- fits$Variance_Components[fits$RMSPE == min(fits$RMSPE)]
 
   fits$easy_names <-  sapply(1:nrow(fits), function(x){
@@ -454,19 +475,19 @@ best_var <- function(formula, dataset,
 #' @param random a character vector of random effects (the column name)
 
 #' @import dplyr
-#' @import SSN
+#' @import SSN2
 #' @importFrom tidyr expand
 #' @importFrom utils txtProgressBar setTxtProgressBar
 #' @importFrom stringr str_replace_all
 #'
 #' @return a df with the model fits
-#' @export
+
 #' @examples
 #' \dontrun{
 #' test <- best_var_str(DOC_mgL ~ PRECIP + BFI + AWC + AREA_km2 + sev, fall_ssn,
 #' corstr=c("tailup","taildown"))}
 #'
-best_var_str <- function(formula, dataset,
+best_var_str2 <- function(formula, dataset,
                          corstr=c("tailup", "taildown","Euclid"),
                          cortype=c("Exponential", "LinearSill","Spherical",
                                    "Mariah", "Epanech","Cauchy", "Gaussian"),
@@ -518,7 +539,7 @@ best_var_str <- function(formula, dataset,
   models <- list()
   #run through all models
   for(x in 1:nrow(corModels)){
-    model <- SSN::glmssn(formula, dataset,
+    model <- SSN2::glmssn(formula, dataset,
                     CorModels = c(unname(as.character(corModels[x,])),random),
                     addfunccol= addfunccol)
     models[[x]] <- model
@@ -526,7 +547,7 @@ best_var_str <- function(formula, dataset,
   }
   close(pb)
   #compare the fits
-  fits <- SSN::InfoCritCompare(models)
+  fits <- SSN2::InfoCritCompare(models)
 
   fits$easy_names <-  sapply(1:nrow(fits), function(x){
     name <- str_split2(fits$Variance_Components[x], "[+]")
@@ -545,7 +566,7 @@ best_var_str <- function(formula, dataset,
 
 }
 
-best_var_str <- function(formula, dataset,
+best_var_str3 <- function(formula, dataset,
                          corstr=c("tailup", "taildown","Euclid"),
                          cortype=c("Exponential", "LinearSill","Spherical",
                                    "Mariah", "Epanech","Cauchy", "Gaussian"),
@@ -597,7 +618,7 @@ best_var_str <- function(formula, dataset,
   catch_errors <- function(y){
     tryCatch(
       {
-        model = SSN::glmssn(formula, dataset,
+        model = SSN2::glmssn(formula, dataset,
                             CorModels = y,
                             addfunccol= addfunccol)
         return(model)
@@ -629,7 +650,7 @@ best_var_str <- function(formula, dataset,
   models <- models[-error]
 
   #compare the fits
-  fits <- SSN::InfoCritCompare(models)
+  fits <- SSN2::InfoCritCompare(models)
 
   fits$easy_names <-  sapply(1:nrow(fits), function(x){
     name <- str_split2(fits$Variance_Components[x], "[+]")
@@ -659,9 +680,8 @@ best_var_str <- function(formula, dataset,
 #' being a plot of the coefficients. Includes the standard error bars. If you did model
 #' selection these are likely larger than is shown, but you can still show, just make it
 #' very clear in the paper that these are only error from the final model.
-#' @export
 #'
-var_imp <- function(model){
+var_imp2 <- function(model){
   nice_name <- Estimate <- direction <- lower <- higher <- NULL
 
   nice_names <- data.frame(
@@ -718,9 +738,8 @@ var_imp <- function(model){
 #' @param model the fitted glmssn object
 #'
 #' @return a table showing the range and 95% CI of burn severity for each severity level
-#' @export
 #'
-burn_impact <- function(model){
+burn_impact2 <- function(model){
   coeff <- summary(model)
   vals <- coeff[["fixed.effects.estimates"]]
   slope <- vals$Estimate[vals$FactorLevel == "DNBR"]
@@ -752,9 +771,8 @@ burn_impact <- function(model){
 #'
 #' @importFrom stats lm as.formula
 #' @return a formula for the final model
-#' @export
 #'
-ds_select <- function(focal="DNBR", response="DOC_mgL", p_limit=0.1, df, covar){
+ds_select2 <- function(focal="DNBR", response="DOC_mgL", p_limit=0.1, df, covar){
   focal_col <- which(colnames(df) %in% focal) #get column(s) of focal
   covar_col <- which(colnames(df) %in% covar) #get column(s) of covariates
   response_col <- which(colnames(df) %in% response) #get column of response

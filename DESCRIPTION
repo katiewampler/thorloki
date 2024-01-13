@@ -26,6 +26,7 @@ Imports:
   showtext,
   sysfonts, 
   BAMMtools, 
+  SSN2,
   SSN,
   caret,
   ggspatial,
