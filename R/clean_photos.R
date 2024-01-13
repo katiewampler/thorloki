@@ -1,7 +1,7 @@
-date <- "2022_11_01"
-group <- "Group 1"
-wd <- paste("Z:/1_Research/2_PNNL_EWEB/Photos", date, group, sep="/")
-datasheet <- read.csv(paste("Z:/1_Research/2_PNNL_EWEB/Field Notes/", date, "/Master_Sample_List_", date, ".csv", sep=""))
+#date <- "2022_11_01"
+#group <- "Group 1"
+#wd <- paste("Z:/1_Research/2_PNNL_EWEB/Photos", date, group, sep="/")
+#datasheet <- read.csv(paste("Z:/1_Research/2_PNNL_EWEB/Field Notes/", date, "/Master_Sample_List_", date, ".csv", sep=""))
 
 #' Clean field photo names
 #'
