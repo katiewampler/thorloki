@@ -138,6 +138,31 @@ plot_ssn <- function(ssn_obj, sites=c("sites", "preds"),
             class(nbins) == "numeric",
             bin_method %in% c("jenks", "quantile"))
 
+  val <- NULL
+  #functions to make breaks and labels
+  .place_val <- function(x) {
+    stopifnot(class(x)=="numeric")
+    place <- 0
+    x <- abs(x)
+    if(x == 1){
+      place <- 1
+    }
+    else if(abs(x) > 1){
+      while(x > 1){
+        x <- x/10
+        place <- place + 1
+      }
+    }else{
+      while(x < 1){
+        x <- x*10
+        place <- place - 1
+      }}
+    place
+
+  } #finds place value of max to determine scale
+  .ceiling_dec <- function(x, level=-.place_val(x)) round(x + 5.0001*10^(-level-1), level) #ceiling function with decimal
+  .floor_dec <- function(x, level=-.place_val(x)) round(x - 5.0001*10^(-level-1), level) #ceiling function with decimal
+
   #reformat data
   clean_data <- list()
   #get min and max of both groups for plotting
@@ -146,10 +171,10 @@ plot_ssn <- function(ssn_obj, sites=c("sites", "preds"),
   vals <- vector()
   for(x in 1:length(type)){
     if(type[x] == "obs"){
-      df <- getSSNdata.frame(ssn_obj[[x]], Name="Obs")
+      df <- SSN::getSSNdata.frame(ssn_obj[[x]], Name="Obs")
       plot_var_index <- which(colnames(df) == response[x])
       data <- df[,c(which(colnames(df)=="pid"),plot_var_index)]
-      data <- na.omit(data)
+      data <- stats::na.omit(data)
       data$size <- size[x]
       colnames(data) <- c("pid", "val", "size")
       clean_data[[x]] <- data
@@ -157,7 +182,7 @@ plot_ssn <- function(ssn_obj, sites=c("sites", "preds"),
       max <- c(max, max(data$val))
       vals <- c(vals, data$val)
     }else if(type[x]== "pred"){
-      pred_points <- getSSNdata.frame(ssn_obj[[x]], Name=sites[x])
+      pred_points <- SSN::getSSNdata.frame(ssn_obj[[x]], Name=sites[x])
       #rename reponse and se
       colnames(pred_points)[which(colnames(pred_points) == response[x])] <- "preds"
       colnames(pred_points)[which(colnames(pred_points) == "preds")+1] <- "se"
@@ -173,7 +198,7 @@ plot_ssn <- function(ssn_obj, sites=c("sites", "preds"),
 
   min <- min(min, na.rm=T)
   max <- max(max, na.rm=T)
-  vals <- na.omit(vals) #to prevent errors
+  vals <- stats::na.omit(vals) #to prevent errors
 
   #get streams
   if(length(which(type=="obs")!= 0)){
@@ -181,7 +206,59 @@ plot_ssn <- function(ssn_obj, sites=c("sites", "preds"),
   }else{
     loc <- ssn_obj[[which(type=="pred")[1]]][["ssn.object"]]@path
   }
-  streams <- read_sf(paste(loc, "edges.shp", sep="/"))
+  streams <- sf::read_sf(paste(loc, "edges.shp", sep="/"))
+
+  if(scale=="binned"){
+    #get data bins
+    #get bins
+    if(bin_method == "jenks"){
+      breaks <- BAMMtools::getJenksBreaks(vals, nbins+1)
+    }else if(bin_method == "quantile"){
+      breaks <- unique(quantile(vals, prob = seq(0, 1, 1/(nbins))))
+    }else{
+      stop("please choose either jenks or quantile for binning method")
+    }
+
+    #add zero to breaks
+    #if endpoint is less than zero, add that, otherwise zero
+    start <- min(.floor_dec(min(vals), prec), 0)
+    #round make cutoff nicer
+    breaks <- .ceiling_dec(breaks, prec)
+    breaks <- c(start, breaks[-1])
+
+    #get color palette
+    if(palette == "parula"){
+      colors <- pals::parula(n=nbins)
+    }else if(palette == "ocean.haline"){
+      colors <- pals::ocean.haline(n=nbins)
+    }else if(palette == "cubicl"){
+      colors <- pals::cubicl(n=nbins)
+    }else if(palette == "kovesi.rainbow"){
+      colors <- pals::kovesi.rainbow(n=nbins)
+    }else if(palette == "katie_pal"){
+      katie <- grDevices::colorRampPalette(c("#d9ead3","#274e13"))
+      colors <- katie(nbins)
+    }else{
+      stop("Please choose 'parula', 'ocean.haline', 'cubehelix', or 'kovesi.rainbow'")
+    }
+
+    #create labels
+    labs_df <- data.frame(start=breaks)
+    labs_df$end <- c(labs_df$start[2:nrow(labs_df)], NA)
+    labs_df <- labs_df[-nrow(labs_df),]
+    if(max(plot_data$val) < 1){
+      labs_df$start <- sprintf(paste("%.", (max(nchar(labs_df$start))-2), "f", sep=""), labs_df$start)
+      labs_df$end <- sprintf(paste("%.", (max(nchar(labs_df$end), na.rm=T)-2), "f", sep=""), labs_df$end)
+    }
+    labs_df$label <- paste(as.character(labs_df$start), as.character(labs_df$end), sep="-")
+    labs <- labs_df$label
+    labs[1] <- paste("<", labs_df$end[1], sep="")
+    breaks <- c(as.numeric(labs_df$start),labs_df$end[nrow(labs_df)])
+
+    #ensure the colors go to the right break
+    labs_df$break_group <- paste("(",labs_df$start, ",",labs_df$end, "]", sep="")
+    names(colors) <- labs_df$break_group
+  }
 
   #get plotting info
   plots <- list()
@@ -189,32 +266,32 @@ plot_ssn <- function(ssn_obj, sites=c("sites", "preds"),
     #get data
     df <- clean_data[[i]]
 
-    site_data <- read_sf(paste(loc, "/", sites[i], ".shp", sep=""))
+    site_data <- sf::read_sf(paste(loc, "/", sites[i], ".shp", sep=""))
 
     #merge sites with data to plot
     plot_data <- merge(site_data, df, by="pid")
 
     #crop to area of interest
-    area<- extent(plot_data)
-    x_lim <- c(area[1]-(area[2]-area[1])*.06, area[2]+(area[2]-area[1])*.14)
+    area<- raster::extent(plot_data)
+    x_lim <- c(area[1]-(area[2]-area[1])*.1, area[2]+(area[2]-area[1])*.1)
     y_lim <- c(area[3]-(area[4]-area[3])*.1, area[4]+(area[4]-area[3])*.1)
 
     #format SE sizes
     if(length(unique(df$size))> 1){
       #get bins
       if(bin_method == "jenks"){
-        breaks <- getJenksBreaks(df$size, 6)
+        size_breaks <- BAMMtools::getJenksBreaks(df$size, 6)
       }else if(bin_method == "quantile"){
-        breaks <- unique(quantile(df$size, prob = seq(0, 1, 1/(6))))
+        size_breaks <- unique(quantile(df$size, prob = seq(0, 1, 1/(6))))
       }else{
         stop("please choose either jenks or quantile for binning method")
       }
 
       #round make cutoff nicer
-      breaks <- .floor_dec(breaks, prec)
+      size_breaks <- .floor_dec(size_breaks, prec)
 
       #create labels
-      labs_df <- data.frame(start=breaks)
+      labs_df <- data.frame(start=size_breaks)
       labs_df$end <- c(labs_df$start[2:nrow(labs_df)], NA)
       labs_df <- labs_df[-nrow(labs_df),]
       if(max(plot_data$val) < 1){
@@ -227,77 +304,11 @@ plot_ssn <- function(ssn_obj, sites=c("sites", "preds"),
     }
 
     if(scale == "binned"){
-      #get bins
-      if(bin_method == "jenks"){
-        breaks <- getJenksBreaks(vals, nbins+1)
-      }else if(bin_method == "quantile"){
-        breaks <- unique(quantile(vals, prob = seq(0, 1, 1/(nbins))))
-      }else{
-        stop("please choose either jenks or quantile for binning method")
-      }
-
-      #functions to make breaks and labels
-      .place_val <- function(x) {
-        stopifnot(class(x)=="numeric")
-        place <- 0
-        x <- abs(x)
-        if(x == 1){
-          place <- 1
-        }
-        else if(abs(x) > 1){
-          while(x > 1){
-            x <- x/10
-            place <- place + 1
-          }
-        }else{
-          while(x < 1){
-            x <- x*10
-            place <- place - 1
-          }}
-        place
-
-      } #finds place value of max to determine scale
-      .ceiling_dec <- function(x, level=-.place_val(x)) round(x + 5.0001*10^(-level-1), level) #ceiling function with decimal
-      .floor_dec <- function(x, level=-.place_val(x)) round(x - 5.0001*10^(-level-1), level) #ceiling function with decimal
-
-      #add zero to breaks
-      #if endpoint is less than zero, add that, otherwise zero
-      start <- min(.floor_dec(min(vals), prec), 0)
-      #round make cutoff nicer
-      breaks <- .ceiling_dec(breaks, prec)
-      breaks <- c(start, breaks[-1])
-
-      #get color palette
-      if(palette == "parula"){
-        colors <- pals::parula(n=nbins)
-      }else if(palette == "ocean.haline"){
-        colors <- pals::ocean.haline(n=nbins)
-      }else if(palette == "cubicl"){
-        colors <- pals::cubicl(n=nbins)
-      }else if(palette == "kovesi.rainbow"){
-        colors <- pals::kovesi.rainbow(n=nbins)
-      }else if(palette == "katie_pal"){
-        katie <- colorRampPalette(c("#d9ead3","#274e13"))
-        colors <- katie(nbins)
-      }else{
-        stop("Please choose 'parula', 'ocean.haline', 'cubehelix', or 'kovesi.rainbow'")
-      }
-
       #bin data
-      plot_data <- plot_data %>% mutate(bins = cut(val, breaks = breaks))
+      plot_data <- plot_data %>% mutate(bins = cut(val, breaks = c(breaks)))
 
-      #create labels
-      labs_df <- data.frame(start=breaks)
-      labs_df$end <- c(labs_df$start[2:nrow(labs_df)], NA)
-      labs_df <- labs_df[-nrow(labs_df),]
-      if(max(plot_data$val) < 1){
-        labs_df$start <- sprintf(paste("%.", (max(nchar(labs_df$start))-2), "f", sep=""), labs_df$start)
-        labs_df$end <- sprintf(paste("%.", (max(nchar(labs_df$end), na.rm=T)-2), "f", sep=""), labs_df$end)
-      }
-      labs_df$label <- paste(as.character(labs_df$start), as.character(labs_df$end), sep="-")
-      labs <- labs_df$label
-      labs[1] <- paste("<", labs_df$end[1], sep="")
-      breaks <- as.numeric(labs_df$start)
+      #fix labels
+      cut_labs <- labs[which(names(colors) %in% plot_data$bins)]
 
       #binned
       if(length(unique(df$size))==1){
@@ -318,7 +329,7 @@ plot_ssn <- function(ssn_obj, sites=c("sites", "preds"),
       }else if(palette == "kovesi.rainbow"){
         colors <- pals::kovesi.rainbow(100)
       }else if(palette == "katie_pal"){
-        katie <- colorRampPalette(c("#d9ead3","#274e13"))
+        katie <- grDevices::colorRampPalette(c("#d9ead3","#274e13"))
         colors <- katie(100)
       }else{
         stop("Please choose 'parula', 'ocean.haline', 'cubehelix', or 'kovesi.rainbow'")
