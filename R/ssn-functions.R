@@ -46,7 +46,7 @@ check_model <- function(model, response){
       ggplot2::labs(x=var)
     resid_plots[[x]] <- plot
   }
-  rplots[[5]] <- patchwork::wrap_plots(resid_plots)
+  plots[[5]] <- patchwork::wrap_plots(resid_plots)
 
 
   #check for potential outliers
@@ -55,7 +55,7 @@ check_model <- function(model, response){
   model_sum2 <- model$args
   p <- nrow(model_sum$betahat) + length(model_sum2$CorModels) + 1
   pot_outlier <- subset(obs_resid, abs(obs_resid$`_resid.student_`) >2 | obs_resid$`_CooksD_` > 0.5)
-  col_num <- which(colnames(pot_outlier) %in% c("_resid.student_", "_CooksD_", "pid", "SITE","_leverage_",response,
+  col_num <- which(colnames(pot_outlier) %in% c("_resid.student_", "_CooksD_", "pid", "Site","_leverage_",response,
                                                 "_resid.standard_", "_resid_", "_fit_"))
   pot_outlier <- pot_outlier[,col_num]
   pot_outlier$cooks_flag <- F
@@ -79,7 +79,7 @@ check_model <- function(model, response){
     ggplot2::geom_point(alpha=0.5) +
     ggplot2::geom_abline (slope=1, linetype = "dashed", color="Red") +
     ggplot2::geom_point(data=outliers, aes(x=observe, y=predict), color="red3") +
-    ggplot2::geom_text(data=outliers, aes(x=observe, y=predict, label=SITE),
+    ggplot2::geom_text(data=outliers, aes(x=observe, y=predict, label=Site),
                        vjust=1.1,hjust="inward", size=3) +
     labs(x=expression(bold("Observed DOC ("*mg*L^{-1}*")")),
          y=expression(bold("Predicted DOC ("*mg*L^{-1}*")"))) +
@@ -186,9 +186,15 @@ plot_ssn <- function(ssn_obj, sites=c("sites", "preds"),
       #rename reponse and se
       colnames(pred_points)[which(colnames(pred_points) == response[x])] <- "preds"
       colnames(pred_points)[which(colnames(pred_points) == "preds")+1] <- "se"
+      if(size[x] == "se"){
+        data <- data.frame(pid=pred_points[,which(colnames(pred_points)=="pid")],
+                           val=pred_points$preds, size=pred_points$se)
+      }else{
+        data <- data.frame(pid=pred_points[,which(colnames(pred_points)=="pid")],
+                           val=pred_points$preds, size=size[x])
+      }
 
-      data <- data.frame(pid=pred_points[,which(colnames(pred_points)=="pid")],
-                         val=pred_points$preds, size=pred_points$se)
+
       clean_data[[x]] <- data
       min <- c(min, min(data$val))
       max <- c(max, max(data$val))
@@ -246,7 +252,7 @@ plot_ssn <- function(ssn_obj, sites=c("sites", "preds"),
     labs_df <- data.frame(start=breaks)
     labs_df$end <- c(labs_df$start[2:nrow(labs_df)], NA)
     labs_df <- labs_df[-nrow(labs_df),]
-    if(max(plot_data$val) < 1){
+    if(max(vals) < 1){
       labs_df$start <- sprintf(paste("%.", (max(nchar(labs_df$start))-2), "f", sep=""), labs_df$start)
       labs_df$end <- sprintf(paste("%.", (max(nchar(labs_df$end), na.rm=T)-2), "f", sep=""), labs_df$end)
     }
@@ -677,7 +683,7 @@ var_imp <- function(model){
 
   nice_names <- data.frame(
     vars=c("MIN_TEM","MAX_TEM","DNBR","SOIL_OM","AWC","LOG_AREA","PRECIP",
-           "ARIDITY","Sample_Time","ELEV","CLAY","TWI","PH","BFI","FOREST","SLOPE"),
+           "ARIDITY","TIME_HR","ELEV","CLAY","TWI","SOIL_PH","BFI","FOREST","SLOPE"),
     nice_name=c("Minimum Temperature", "Maximum Temperature","Burn Severity (dNBR)",
                 "Soil Organic Matter","Available Water Capacity","log of Basin Area",
                 "Annual Precipitation","Aridity Index",
