@@ -14,7 +14,7 @@ best_var_str_ssn2(
   addfunccol = "afvArea",
   random = NULL,
   parallel = T,
-  ncores = NULL
+  nCores = NULL
 )
 }
 \arguments{

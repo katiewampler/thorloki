@@ -595,6 +595,9 @@ best_var_str2 <- function(formula, dataset,
 #' @importFrom tidyr expand
 #' @importFrom utils txtProgressBar setTxtProgressBar
 #' @importFrom stringr str_replace_all
+#' @importFrom parallel makeCluster stopCluster
+#' @importFrom doParallel registerDoParallel
+#' @importFrom parallelly availableCores
 #'
 #' @return a df with the model fits
 #' @export
