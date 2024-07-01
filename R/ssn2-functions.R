@@ -491,7 +491,7 @@ best_var_str2 <- function(formula, dataset,
                          cortype=c("Exponential", "LinearSill","Spherical",
                                    "Mariah", "Epanech","Cauchy", "Gaussian"),
                          addfunccol = "afvArea",
-                         random=NULL){
+                         random=NULL, parallel=T, ncores=NULL){
   stopifnot(corstr %in% c("tailup", "taildown","Euclid"),
             cortype %in% c("Exponential", "LinearSill","Spherical","Mariah", "Epanech","Cauchy" , "Gaussian"))
   cor1 <- cor2 <- cor3 <- NULL
@@ -535,16 +535,32 @@ best_var_str2 <- function(formula, dataset,
   #add progress bar
   pb <- utils::txtProgressBar(min = 0,max = nrow(corModels), style = 3,char = "=")
 
+  #set up parallel processing
+  if(is.null(ncore)){nCores <- parallelly::availableCores()}
+  cl <- parallel::makeCluster(nCores)
+  doParallel::registerDoParallel(cl)
+
   models <- list()
   #run through all models
-  for(x in 1:nrow(corModels)){
-    model <- SSN2::glmssn(formula, dataset,
-                    CorModels = c(unname(as.character(corModels[x,])),random),
-                    addfunccol= addfunccol)
-    models[[x]] <- model
-    utils::setTxtProgressBar(pb,x)
+  if(parallel == T){
+    foreach (i=1:nrow(corModels), .combine=rbind) %dopar% {
+      model <- SSN2::glmssn(formula, dataset,
+                            CorModels = c(unname(as.character(corModels[x,])),random),
+                            addfunccol= addfunccol)
+      models[[x]] <- model}
+    parallel::stopCluster(cl) #close out, this is the last use
+
+  }else{
+    for(x in 1:nrow(corModels)){
+      model <- SSN2::glmssn(formula, dataset,
+                            CorModels = c(unname(as.character(corModels[x,])),random),
+                            addfunccol= addfunccol)
+      models[[x]] <- model
+      utils::setTxtProgressBar(pb,x)
+    }
+    close(pb)
   }
-  close(pb)
+
   #compare the fits
   fits <- SSN2::InfoCritCompare(models)
 
