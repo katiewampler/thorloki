@@ -609,7 +609,7 @@ best_var_str_ssn2 <- function(formula, dataset,
                               euclid_type = c("none", "spherical", "exponential", "gaussian","cosine", "cubic","pentaspherical",
                                               "wave", "jbessel", "gravity","rquad","magnetic"),
                               addfunccol = "afvArea",
-                              random=NULL, parallel=T, ncores=NULL){
+                              random=NULL, parallel=T, nCores=NULL){
   stopifnot(tailup_type %in% c("linear", "spherical", "exponential","mariah","epa", "none"),
             taildown_type %in% c("linear", "spherical", "exponential","mariah","epa", "none"),
             euclid_type %in% c("spherical", "exponential", "gaussian","cosine", "cubic","pentaspherical",
@@ -630,7 +630,7 @@ best_var_str_ssn2 <- function(formula, dataset,
 
   if(parallel==T){
     #set up parallel processing
-    if(is.null(ncore)){nCores <- parallelly::availableCores()}
+    if(is.null(nCores)){nCores <- parallelly::availableCores()}
     cl <- parallel::makeCluster(nCores)
     doParallel::registerDoParallel(cl)
   }
