@@ -581,104 +581,101 @@ best_var_str2 <- function(formula, dataset,
 
 }
 
-best_var_str3 <- function(formula, dataset,
-                         corstr=c("tailup", "taildown","Euclid"),
-                         cortype=c("Exponential", "LinearSill","Spherical",
-                                   "Mariah", "Epanech","Cauchy", "Gaussian"),
-                         addfunccol = "afvArea",
-                         random=NULL){
-  stopifnot(corstr %in% c("tailup", "taildown","Euclid"),
-            cortype %in% c("Exponential", "LinearSill","Spherical","Mariah", "Epanech","Cauchy" , "Gaussian"))
-  cor1 <- cor2 <- cor3 <- NULL
+#' Test all potential types of variance structures
+#'
+#' @param formula the best fitting variables from glmssn model
+#' @param dataset the ssn object being modeled
+#' @param corstr the types of autocorrelation to include
+#' @param cortype the types of autocorrelation models
+#' @param addfunccol additive function column
+#' @param random a formula (~Random), with the random variables you want to add
 
-  #remove models that have incompatible model/type
-  invalid <- c(paste(c("Epanech", "LinearSill", "Mariah"),".Euclid", sep=""),
-               paste(c("Cauchy", "Gaussian"), ".tailup", sep=""),
-               paste(c("Cauchy", "Gaussian"), ".taildown", sep=""))
+#' @import dplyr
+#' @import SSN2
+#' @importFrom tidyr expand
+#' @importFrom utils txtProgressBar setTxtProgressBar
+#' @importFrom stringr str_replace_all
+#'
+#' @return a df with the model fits
 
-  #for each type of corstr, get all options
-  if(length(corstr) == 1){
-    corModels <- data.frame(cor1=paste(cortype, corstr, sep="."))
-  }else if(length(corstr) == 2){
-    corModels1 <- c(paste(cortype, corstr[1], sep="."), NA)
-    corModels2 <- c(paste(cortype, corstr[2], sep="."), NA)
-    corModels <- data.frame(cor1=corModels1, cor2=corModels2)
-    corModels <- corModels %>% tidyr::expand(cor1, cor2)
-  }else if(length(corstr) == 3){
-    corModels1 <- c(paste(cortype, corstr[1], sep="."),NA)
-    corModels2 <- c(paste(cortype, corstr[2], sep="."),NA)
-    corModels3 <- c(paste(cortype, corstr[3], sep="."), NA)
-    corModels <- data.frame(cor1=corModels1, cor2=corModels2, cor3=corModels3)
-    corModels <- corModels %>% tidyr::expand(cor1, cor2, cor3)
-  }
+#' @examples
+#' \dontrun{
+#' test <- best_var_str(DOC_mgL ~ PRECIP + BFI + AWC + AREA_km2 + sev, fall_ssn,
+#' corstr=c("tailup","taildown"))}
+#'
+best_var_str_ssn2 <- function(formula, dataset,
+                              tailup_type = c("none", "linear", "spherical", "exponential","mariah","epa"),
+                              taildown_type = c("none", "linear", "spherical", "exponential","mariah","epa"),
+                              euclid_type = c("none", "spherical", "exponential", "gaussian","cosine", "cubic","pentaspherical",
+                                              "wave", "jbessel", "gravity","rquad","magnetic"),
+                              addfunccol = "afvArea",
+                              random=NULL, parallel=T, ncores=NULL){
+  stopifnot(tailup_type %in% c("linear", "spherical", "exponential","mariah","epa", "none"),
+            taildown_type %in% c("linear", "spherical", "exponential","mariah","epa", "none"),
+            euclid_type %in% c("spherical", "exponential", "gaussian","cosine", "cubic","pentaspherical",
+                               "wave", "jbessel", "gravity","rquad","magnetic", "none"))
 
-  corModels <- subset(corModels, !(corModels$cor1 %in% invalid))
-  if(ncol(corModels) > 1){
-    corModels <- subset(corModels, !(corModels$cor2 %in% invalid))}
-  if(ncol(corModels) > 2){
-    corModels <- subset(corModels, !(corModels$cor3 %in% invalid))}
-
-  #remove row with full NA's
-  corModels <- subset(corModels, !(is.na(corModels$cor1)==T & is.na(corModels$cor2)==T & is.na(corModels$cor3)==T))
-
-  #make df into characters
-  corModels <- data.frame(lapply(corModels, as.character), stringsAsFactors=FALSE)
+  #make a matrix with all options
+  corModels <- data.frame(tailup=NA,taildown=NA, euclid=NA)
+  for(x in tailup_type){
+    for(y in taildown_type){
+      for(z in euclid_type){
+        run <- data.frame(tailup=x, taildown=y, euclid=z)
+        corModels <- rbind(corModels, run)}}}
+  corModels <- corModels[-1,]
 
   #try all the models
   #add progress bar
   pb <- utils::txtProgressBar(min = 0,max = nrow(corModels), style = 3,char = "=")
 
-  models <- list()
-  error <- vector() #catch error runs
-  catch_errors <- function(y){
-    tryCatch(
-      {
-        model = SSN2::glmssn(formula, dataset,
-                            CorModels = y,
-                            addfunccol= addfunccol)
-        return(model)
-      },
-      error=function(e) {
-        model=e
-        error <- c(error, x)
-        return(model)
-      },
-      warning=function(w) {
-        model=w
-        return(model)
-      }
-    )
-  } #catch errors without failing the loop
-  #run through all models
-  for(x in 19:nrow(corModels)){
-    x_cormodels <- c(unname(as.character(corModels[x,])),random)
-    x_cormodels <- x_cormodels[is.na(x_cormodels)==F]
-
-    model <- catch_errors(x_cormodels)
-    if(class(model)[1] != "glmssn"){error <- c(error, x)}
-    models[[x]] <- model
-    utils::setTxtProgressBar(pb,x)
+  if(parallel==T){
+    #set up parallel processing
+    if(is.null(ncore)){nCores <- parallelly::availableCores()}
+    cl <- parallel::makeCluster(nCores)
+    doParallel::registerDoParallel(cl)
   }
-  close(pb)
 
-  #remove errors
-  models <- models[-error]
+  models <- list()
+  #run through all models
+  if(parallel==T){
+    foreach (x=1:nrow(corModels), .combine=rbind) %dopar%{
+      model <- SSN2::ssn_lm(formula, dataset,
+                            tailup_type = corModels[x,1],
+                            taildown_type = corModels[x,2],
+                            euclid_type = corModels[x,3],
+                            random= random,
+                            additive = "afvArea")
+      models[[x]] <- model
+    }
+    parallel::stopCluster(cl) #close out, this is the last use
+  }else{
+    for(x in 1:nrow(corModels)){
+      model <- SSN2::ssn_lm(formula, dataset,
+                            tailup_type = corModels[x,1],
+                            taildown_type = corModels[x,2],
+                            euclid_type = corModels[x,3],
+                            random= random,
+                            additive = "afvArea")
+      models[[x]] <- model
+      utils::setTxtProgressBar(pb,x)
+    }
+    close(pb)
+  }
 
   #compare the fits
-  fits <- SSN2::InfoCritCompare(models)
+  fits <- as.data.frame(t(sapply(models, SSN2::glance)))
+  fits2<- as.data.frame(t(sapply(models, SSN2::loocv)))
+  fits <- cbind(fits,fits2)
+  best_AIC <- which(unlist(fits$AICc) == min(unlist(fits$AICc)))
+  best_RMSPE <- which(unlist(fits$RMSPE) == min(unlist(fits$RMSPE)))
+  best_R2 <- which(unlist(fits$pseudo.r.squared) == min(unlist(fits$pseudo.r.squared)))
 
-  fits$easy_names <-  sapply(1:nrow(fits), function(x){
-    name <- str_split2(fits$Variance_Components[x], "[+]")
-    name <- name[1:(length(name)-1)]
-    name <- stringr::str_replace_all(name, " ", "")
-    name <- paste(name, collapse=",")})
-  fits <- fits[,c(3,5,8,11:14)]
-  best_AIC <- fits$Variance_Components[fits$AIC == min(fits$AIC)]
-  best_RMSPE <- fits$Variance_Components[fits$RMSPE == min(fits$RMSPE)]
+  fits$formula <- paste(corModels$tailup, corModels$taildown, corModels$euclid, sep=" + ")
 
   cat("The best variance models are:",
-      paste("AIC: (", which(fits$Variance_Components == best_AIC), ") ", best_AIC, sep=""),
-      paste("RMSPE: (",which(fits$Variance_Components == best_RMSPE), ") ", best_RMSPE, sep=""), sep="\n")
+      paste("AIC:", fits$formula[best_AIC], sep=""),
+      paste("RMSPE:",fits$formula[best_RMSPE], sep=""),
+      paste("R2:",fits$formula[best_R2] , sep=""),sep="\n")
 
   return(fits)
 
