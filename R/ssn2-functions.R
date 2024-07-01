@@ -598,7 +598,7 @@ best_var_str2 <- function(formula, dataset,
 #' @importFrom parallel makeCluster stopCluster
 #' @importFrom doParallel registerDoParallel
 #' @importFrom parallelly availableCores
-#'
+#' @import doSNOW
 #' @return a df with the model fits
 #' @export
 #' @examples
