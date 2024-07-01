@@ -11,7 +11,9 @@ best_var_str2(
   cortype = c("Exponential", "LinearSill", "Spherical", "Mariah", "Epanech", "Cauchy",
     "Gaussian"),
   addfunccol = "afvArea",
-  random = NULL
+  random = NULL,
+  parallel = T,
+  ncores = NULL
 )
 }
 \arguments{

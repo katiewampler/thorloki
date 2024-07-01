@@ -597,7 +597,7 @@ best_var_str2 <- function(formula, dataset,
 #' @importFrom stringr str_replace_all
 #'
 #' @return a df with the model fits
-
+#' @export
 #' @examples
 #' \dontrun{
 #' test <- best_var_str(DOC_mgL ~ PRECIP + BFI + AWC + AREA_km2 + sev, fall_ssn,
