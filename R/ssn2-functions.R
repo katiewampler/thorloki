@@ -635,21 +635,26 @@ best_var_str_ssn2 <- function(formula, dataset,
     #set up parallel processing
     if(is.null(nCores)){nCores <- parallelly::availableCores()}
     cl <- parallel::makeCluster(nCores)
-    doParallel::registerDoParallel(cl)
+    doSNOW::registerDoSNOW(cl)
+    pb <- txtProgressBar(max = nrow(corModels), style = 3)
+    progress <- function(n) setTxtProgressBar(pb, n)
+    opts <- list(progress = progress)
+
   }
 
   models <- list()
   #run through all models
   if(parallel==T){
-    foreach (x=1:nrow(corModels), .combine=rbind) %dopar%{
+    foreach (i=1:nrow(corModels), .combine=rbind, .options.snow = opts) %dopar%{
       model <- SSN2::ssn_lm(formula, dataset,
-                            tailup_type = corModels[x,1],
-                            taildown_type = corModels[x,2],
-                            euclid_type = corModels[x,3],
+                            tailup_type = corModels[i,1],
+                            taildown_type = corModels[i,2],
+                            euclid_type = corModels[i,3],
                             random= random,
                             additive = "afvArea")
-      models[[x]] <- model
+      models[[i]] <- model
     }
+    close(pb)
     parallel::stopCluster(cl) #close out, this is the last use
   }else{
     for(x in 1:nrow(corModels)){
